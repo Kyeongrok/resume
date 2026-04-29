@@ -103,6 +103,32 @@ def set_page_layout(docx_path: Path) -> None:
             temp_path.unlink(missing_ok=True)
 
 
+def set_korean_font(docx_path: Path, font: str = "Malgun Gothic") -> None:
+    with zipfile.ZipFile(docx_path, "r") as src:
+        entries = {name: src.read(name) for name in src.namelist()}
+
+    for xml_file in ("word/styles.xml", "word/document.xml"):
+        if xml_file not in entries:
+            continue
+        xml = entries[xml_file].decode("utf-8")
+        xml = re.sub(
+            r"<w:rFonts[^/]*/>",
+            f'<w:rFonts w:ascii="{font}" w:hAnsi="{font}" w:eastAsia="{font}" w:cs="{font}"/>',
+            xml,
+        )
+        entries[xml_file] = xml.encode("utf-8")
+
+    temp_path = docx_path.with_suffix(".tmp.docx")
+    try:
+        with zipfile.ZipFile(temp_path, "w", compression=zipfile.ZIP_DEFLATED) as dst:
+            for name, data in entries.items():
+                dst.writestr(name, data)
+        temp_path.replace(docx_path)
+    finally:
+        if temp_path.exists():
+            temp_path.unlink(missing_ok=True)
+
+
 def build_docx(lang: str, pandoc: str) -> Path:
     info = RESUMES[lang]
     md_path: Path = info["md"]
@@ -130,6 +156,8 @@ def build_docx(lang: str, pandoc: str) -> Path:
         raise RuntimeError(f"Pandoc failed (exit {result.returncode})")
 
     set_page_layout(out_docx)
+    if lang == "ko":
+        set_korean_font(out_docx)
     return out_docx
 
 
